@@ -198,7 +198,7 @@ app.post('/payomatix-webhook', (req, res) => {
     res.status(200).json({ received: true, message: 'Webhook received and processed.' });
 });
 
-app.listen(port, () => {
+app.listen(3000, () => {
     console.log(`Payomatix production backend server listening at http://localhost:${port}`);
     console.log('----------------------------------------------------');
     console.log('IMPORTANT PRODUCTION NOTES:');
