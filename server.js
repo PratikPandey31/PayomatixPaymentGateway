@@ -7,7 +7,7 @@ const helmet = require('helmet'); // For basic security headers
 const Joi = require('joi'); // For robust input validation
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = 3000;
 
 // --- Configuration ---
 // IMPORTANT: Retrieve these from environment variables for production!
@@ -17,7 +17,7 @@ const PAYOMATIX_SECRET_KEY = process.env.PAYOMATIX_SECRET_KEY;
 // The user has explicitly stated this as the API endpoint for direct transactions.
 // However, based on the provided documentation, this URL is specified for *TEST* transactions.
 // It is CRITICAL to VERIFY THE CORRECT PRODUCTION API ENDPOINT with Payomatix support or their full documentation.
-const PAYOMATIX_API_URL = process.env.PAYOMATIX_API_URL || 'https://admin.payomatix.com/payment/merchant/transaction';
+const PAYOMATIX_API_URL = 'https://admin.payomatix.com/payment/merchant/transaction';
 
 // --- Middleware ---
 // Apply Helmet for basic security headers
@@ -140,7 +140,7 @@ app.post('/create-payment-intent', async (req, res) => {
 
         console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
 
-        const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
+const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -152,32 +152,45 @@ app.post('/create-payment-intent', async (req, res) => {
 
         const payomatixData = await payomatixResponse.json();
 
-        if (payomatixResponse.ok) {
-            console.log('Payomatix API successful response:', payomatixData);
+        // **IMPORTANT: Log the raw Payomatix response data for debugging**
+        console.log('Raw Payomatix API response data:', payomatixData);
 
-            if (payomatixData.redirect_url) { // Sample uses 'redirect_url', not 'redirection_url'
+        // Check Payomatix's custom response codes and status for success/failure
+        if (payomatixData.responseCode === 300 && payomatixData.status === 'redirect') {
+            console.log('Payomatix API successful response (redirect):', payomatixData);
+
+            if (payomatixData.redirect_url) {
                 res.json({
                     success: true,
                     message: 'Payment intent created successfully. Redirect URL received.',
-                    redirectUrl: payomatixData.redirect_url, // Sample uses 'redirect_url'
-                    transactionId: payomatixData.merchant_ref || payomatixData.transaction_id // Use merchant_ref if available, fallback to transaction_id
+                    redirectUrl: payomatixData.redirect_url,
+                    transactionId: payomatixData.merchant_ref || payomatixData.transaction_id // Assuming merchant_ref or transaction_id might be present in a successful redirect response
                 });
             } else {
-                console.warn('Payomatix successful response did not contain "redirect_url":', payomatixData);
+                // This case is unlikely if responseCode is 300 and status is 'redirect'
+                console.warn('Payomatix successful redirect response did not contain "redirect_url":', payomatixData);
                 res.status(500).json({
                     success: false,
                     message: 'Payment intent created, but redirection URL was not provided by Payomatix. Please check Payomatix API response format.',
                     payomatixResponse: payomatixData
                 });
             }
-
-        } else {
-            console.error('Error response from Payomatix API (status:', payomatixResponse.status, '):', payomatixData);
-            res.status(payomatixResponse.status || 500).json({
+        } else if (payomatixData.responseCode >= 400 || payomatixData.status === 'validation_error') {
+            // Treat any Payomatix responseCode 400 or higher, or a 'validation_error' status as an error
+            console.error('Error response from Payomatix API:', payomatixData);
+            res.status(payomatixResponse.status || 500).json({ // Still use HTTP status if available, fallback to 500
                 success: false,
                 message: 'Failed to create payment intent with Payomatix.',
-                error: payomatixData.response || payomatixData.message || payomatixData.error || 'Unknown error from Payomatix API.',
+                error: payomatixData.response || payomatixData.message || 'Unknown error from Payomatix API.',
                 payomatixErrors: payomatixData.errors // Pass specific errors object if available
+            });
+        } else {
+            // Handle any other unexpected but not necessarily "error" Payomatix responses
+            console.warn('Unexpected but not explicitly erroneous response from Payomatix API:', payomatixData);
+            res.status(500).json({
+                success: false,
+                message: 'Received an unexpected response from Payomatix API.',
+                payomatixResponse: payomatixData
             });
         }
 
