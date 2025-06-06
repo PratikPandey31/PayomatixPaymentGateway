@@ -295,12 +295,12 @@ app.post('/create-payment-intent', async (req, res) => {
 
     try {
         const payomatixRequestBody = {
-            email: customerEmail,
-            amount: amount.toFixed(2),
-            currency: currency,
-            return_url: returnUrl,
-            notify_url: notifyUrl,
-            merchant_ref: merchantRef
+            "email": customerEmail.toString(),
+            "amount": amount.toFixed(2).toString(), // Ensure amount is a string with 2 decimal places
+            "currency": currency.toString(),
+            "return_url": returnUrl.toString(),
+            "notify_url": notifyUrl.toString(),
+            "merchant_ref": merchantRef.toString(),
         };
 
         console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
