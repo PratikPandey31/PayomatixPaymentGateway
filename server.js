@@ -308,7 +308,6 @@ app.post('/create-payment-intent', async (req, res) => {
 const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
                 'Accept': 'application/json',
                 'Authorization': PAYOMATIX_SECRET_KEY
             },
