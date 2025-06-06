@@ -294,16 +294,18 @@ app.post('/create-payment-intent', async (req, res) => {
 
 
     try {
-        const payomatixRequestBody = {
-            "email": customerEmail.toString(),
-            "amount": amount.toFixed(2).toString(), // Ensure amount is a string with 2 decimal places
-            "currency": currency.toString(),
-            "return_url": returnUrl.toString(),
-            "notify_url": notifyUrl.toString(),
-            "merchant_ref": merchantRef.toString(),
-        };
+const payomatixRequestBody = JSON.stringify({
+    email: customerEmail.trim(),  
+    amount: amount.toFixed(2).trim(),  
+    currency: currency.trim(),
+    return_url: returnUrl.trim(),  
+    notify_url: notifyUrl.trim(),  
+    merchant_ref: merchantRef.trim()
+});
 
-        console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
+
+
+console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
 
 const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
             method: 'POST',
@@ -311,7 +313,7 @@ const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
                 'Accept': 'application/json',
                 'Authorization': PAYOMATIX_SECRET_KEY
             },
-            body: JSON.stringify(payomatixRequestBody)
+            body: payomatixRequestBody
         });
 
         const payomatixData = await payomatixResponse.json();
