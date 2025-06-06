@@ -311,7 +311,8 @@ const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
-                'Authorization': PAYOMATIX_SECRET_KEY
+                'Authorization': PAYOMATIX_SECRET_KEY,
+                'Content-Type': 'application/json'
             },
             body: payomatixRequestBody
         });
