@@ -222,7 +222,7 @@ const port = 3000;
 const PAYOMATIX_PUBLIC_KEY = process.env.PAYOMATIX_PUBLIC_KEY;
 const PAYOMATIX_SECRET_KEY = process.env.PAYOMATIX_SECRET_KEY;
 
-const PAYOMATIX_API_URL = 'https://admin.payomatix.com';
+const PAYOMATIX_API_URL = 'https://admin.payomatix.com/payment/merchant/transaction';
 
 app.use(helmet());
 
