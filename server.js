@@ -292,40 +292,36 @@ app.post('/create-payment-intent', async (req, res) => {
     } = value;
 
 
-try {
-    // 1. Create a parameters object (no need to stringify)
-    const payomatixParams = {
-        email: customerEmail.trim(),
-        amount: amount.toFixed(2), // No need to trim a number
-        currency: currency.trim(),
-        return_url: returnUrl.trim(),
-        notify_url: notifyUrl.trim(),
-        merchant_ref: merchantRef.trim()
-    };
+    try {
+const payomatixRequestBody = JSON.stringify({
+    email: customerEmail.trim(),  
+    amount: amount.toFixed(2).trim(),  
+    currency: currency.trim(),
+    return_url: returnUrl.trim(),  
+    notify_url: notifyUrl.trim(),  
+    merchant_ref: merchantRef.trim()
+});
 
-    // 2. Convert the object to URL query parameters
-    const queryParams = new URLSearchParams(payomatixParams).toString();
-    const requestUrl = `${PAYOMATIX_API_URL}?${queryParams}`;
 
-    console.log('Sending GET request to Payomatix API:', requestUrl);
 
-    // 3. Make the fetch call using GET and the new URL
-    const payomatixResponse = await fetch(requestUrl, {
-        method: 'GET', // <-- The main change is here
-        headers: {
-            'Accept': 'application/json',
-            'Authorization': PAYOMATIX_SECRET_KEY,
-            // 'Content-Type' is not needed for a GET request with no body
-        },
-        // A body is not allowed in a GET request
-    });
+console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
 
-    const payomatixData = await payomatixResponse.json();
+const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': PAYOMATIX_SECRET_KEY,
+                'Content-Type': 'application/json'
+            },
+            body: payomatixRequestBody
+        });
 
-    console.log('Raw Payomatix API response data:', payomatixData);
+        const payomatixData = await payomatixResponse.json();
 
-    if (payomatixData.responseCode === 300 && payomatixData.status === 'redirect') {
-        console.log('Payomatix API successful response (redirect):', payomatixData);
+        console.log('Raw Payomatix API response data:', payomatixData);
+
+        if (payomatixData.responseCode === 300 && payomatixData.status === 'redirect') {
+            console.log('Payomatix API successful response (redirect):', payomatixData);
 
             if (payomatixData.redirect_url) {
                 res.json({
