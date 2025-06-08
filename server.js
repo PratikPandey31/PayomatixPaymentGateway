@@ -222,7 +222,7 @@ const port = 3000;
 const PAYOMATIX_PUBLIC_KEY = process.env.PAYOMATIX_PUBLIC_KEY;
 const PAYOMATIX_SECRET_KEY = process.env.PAYOMATIX_SECRET_KEY;
 
-const PAYOMATIX_API_URL = 'https://admin.payomatix.com/payment/merchant/transaction';
+const PAYOMATIX_API_URL = 'https://admin.payomatix.com';
 
 app.use(helmet());
 
@@ -290,7 +290,6 @@ app.post('/create-payment-intent', async (req, res) => {
         returnUrl,
         notifyUrl,
     } = value;
-
 
 
     try {
