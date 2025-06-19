@@ -42,7 +42,7 @@ const paymentSchema = Joi.object({
         'string.email': 'Customer email must be a valid email address.',
         'any.required': 'Customer email is required.'
     })
-    // Do NOT require merchantRef, returnUrl, notifyUrl from frontend
+    // returnUrl and notifyUrl are NOT required or validated here
 });
 
 app.post('/create-payment-intent', async (req, res) => {
@@ -72,7 +72,7 @@ app.post('/create-payment-intent', async (req, res) => {
     try {
         const payomatixRequestBody = JSON.stringify({
             email: customerEmail.trim(),  
-            amount: amount.toFixed(2).trim(),  
+            amount: amount.toFixed(2),  
             currency: currency.trim(),
             return_url: returnUrl.trim(),  
             notify_url: notifyUrl.trim(),  
