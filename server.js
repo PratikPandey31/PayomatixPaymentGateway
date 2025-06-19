@@ -42,7 +42,8 @@ const paymentSchema = Joi.object({
         'string.email': 'Customer email must be a valid email address.',
         'any.required': 'Customer email is required.'
     })
-})
+    // Do NOT require merchantRef, returnUrl, notifyUrl from frontend
+});
 
 app.post('/create-payment-intent', async (req, res) => {
     console.log('Received request to create payment intent:', req.body);
@@ -60,30 +61,27 @@ app.post('/create-payment-intent', async (req, res) => {
     const {
         amount,
         currency,
-        customerEmail,
-        merchantRef,
-        returnUrl,
-        notifyUrl,
+        customerEmail
     } = value;
 
-     return_url='https://payomatixpaymentgatewayfrontend.onrender.com/payment-success',
-     notify_url='https://payomatixpaymentgateway.onrender.com/payomatix-webhook'
-     merchantRef = `payomatix-merchant-ref-${Date.now()}-${Math.floor(Math.random() * 10000)}`; 
+    // Always generate defaults if not provided
+    let merchantRef = req.body.merchantRef || `payomatix-merchant-ref-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    let returnUrl = req.body.returnUrl || 'https://payomatixpaymentgatewayfrontend.onrender.com/payment-success';
+    let notifyUrl = req.body.notifyUrl || 'https://payomatixpaymentgateway.onrender.com/payomatix-webhook';
 
     try {
-const payomatixRequestBody = JSON.stringify({
-    email: customerEmail.trim(),  
-    amount: amount.toFixed(2).trim(),  
-    currency: currency.trim(),
-    return_url: returnUrl.trim(),  
-    notify_url: notifyUrl.trim(),  
-    merchant_ref: merchantRef.trim()
-});
+        const payomatixRequestBody = JSON.stringify({
+            email: customerEmail.trim(),  
+            amount: amount.toFixed(2).trim(),  
+            currency: currency.trim(),
+            return_url: returnUrl.trim(),  
+            notify_url: notifyUrl.trim(),  
+            merchant_ref: merchantRef.trim()
+        });
 
+        console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
 
-console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
-
-const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
+        const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
