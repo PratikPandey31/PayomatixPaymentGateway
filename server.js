@@ -41,23 +41,8 @@ const paymentSchema = Joi.object({
         'string.base': 'Customer email must be a string.',
         'string.email': 'Customer email must be a valid email address.',
         'any.required': 'Customer email is required.'
-    }),
-    returnUrl: Joi.string().uri().required().messages({
-        'string.base': 'Return URL must be a string.',
-        'string.uri': 'Return URL must be a valid URI.',
-        'any.required': 'Return URL is required.'
-    }),
-    notifyUrl: Joi.string().uri().required().messages({
-        'string.base': 'Notify URL must be a string.',
-        'string.uri': 'Notify URL must be a valid URI.',
-        'any.required': 'Notify URL is required.'
-    }),
-    merchantRef: Joi.string().max(50).required().messages({
-    'string.base': 'Merchant reference must be a string.',
-    'any.required': 'Merchant reference is required.',
-    'string.max': 'Merchant reference must not exceed 50 characters.'
+    })
 })
-});
 
 app.post('/create-payment-intent', async (req, res) => {
     console.log('Received request to create payment intent:', req.body);
@@ -71,7 +56,7 @@ app.post('/create-payment-intent', async (req, res) => {
             errors: error.details.map(d => d.message)
         });
     }
-
+    
     const {
         amount,
         currency,
@@ -81,6 +66,9 @@ app.post('/create-payment-intent', async (req, res) => {
         notifyUrl,
     } = value;
 
+     return_url='https://payomatixpaymentgatewayfrontend.onrender.com/payment-success',
+     notify_url='https://payomatixpaymentgateway.onrender.com/payomatix-webhook'
+     merchantRef = `payomatix-merchant-ref-${Date.now()}-${Math.floor(Math.random() * 10000)}`; 
 
     try {
 const payomatixRequestBody = JSON.stringify({
@@ -91,7 +79,6 @@ const payomatixRequestBody = JSON.stringify({
     notify_url: notifyUrl.trim(),  
     merchant_ref: merchantRef.trim()
 });
-
 
 
 console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
