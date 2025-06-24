@@ -4,11 +4,12 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const helmet = require('helmet');
 const Joi = require('joi');
-const morgan = require('morgan'); // Morgan is already added and working!
+const morgan = require('morgan');
 
 const app = express();
 const port = 3000;
 
+// Environment Variables (ensure these are set in Render)
 const PAYOMATIX_PUBLIC_KEY = process.env.PAYOMATIX_PUBLIC_KEY;
 const PAYOMATIX_SECRET_KEY = process.env.PAYOMATIX_SECRET_KEY;
 const MEDICARE_BACKEND_URL = process.env.MEDICARE_BACKEND_URL;
@@ -16,17 +17,21 @@ const MEDICARE_INTERNAL_SECRET = process.env.MEDICARE_INTERNAL_SECRET;
 
 const PAYOMATIX_API_URL = 'https://admin.payomatix.com/payment/merchant/transaction';
 
+// Security Middleware
 app.use(helmet());
 
+// Logging and Body Parsing
 app.use(morgan('dev'));
-app.use(bodyParser.json());
+app.use(bodyParser.json()); // Parses application/json bodies
 
+// CORS Configuration
 app.use(cors({
-    origin:'*',
+    origin: '*', // Be more specific in production, e.g., 'https://yourfrontend.onrender.com'
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Joi Schema for validating incoming payment requests
 const paymentSchema = Joi.object({
     amount: Joi.number().positive().precision(2).required().messages({
         'number.base': 'Amount must be a number.',
@@ -44,10 +49,19 @@ const paymentSchema = Joi.object({
         'string.base': 'Customer email must be a string.',
         'string.email': 'Customer email must be a valid email address.',
         'any.required': 'Customer email is required.'
+    }),
+    // --- NEW: Optional userId and cardId fields ---
+    userId: Joi.string().optional().messages({
+        'string.base': 'User ID must be a string.'
+    }),
+    cardId: Joi.string().optional().messages({
+        'string.base': 'Card ID must be a string.'
     })
 });
 
+// Route to create a payment intent with Payomatix
 app.post('/create-payment-intent', async (req, res) => {
+    // Validate incoming request body
     const { error, value } = paymentSchema.validate(req.body, { abortEarly: false });
     if (error) {
         console.error('Validation error for /create-payment-intent:', error.details);
@@ -61,35 +75,47 @@ app.post('/create-payment-intent', async (req, res) => {
     const {
         amount,
         currency,
-        customerEmail
-    } = value;
+        customerEmail,
+        userId, // Extracted new optional field
+        cardId  // Extracted new optional field
+    } = value; // 'value' contains the validated and cleaned data
 
-    let merchantRef = req.body.merchantRef || `payomatix-merchant-ref-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    let returnUrl = 'https://payomatixpaymentgatewayfrontend.onrender.com/payment-status';
-    let notifyUrl = 'https://payomatixpaymentgateway.onrender.com/payomatix-webhook';
+    // Generate a unique merchantRef. Embed userId and cardId if provided.
+    // This allows us to retrieve them when the webhook returns.
+    let merchantRef = `payomatix-ref-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    if (userId) {
+        merchantRef += `-user_${userId}`;
+    }
+    if (cardId) {
+        merchantRef += `-card_${cardId}`;
+    }
+
+    // Payomatix return and notify URLs (these need to be public and reachable by Payomatix)
+    let returnUrl = 'https://payomatixpaymentgatewayfrontend.onrender.com/payment-status'; // Frontend URL
+    let notifyUrl = 'https://payomatixpaymentgateway.onrender.com/payomatix-webhook'; // This proxy's webhook URL
 
     try {
+        // Construct the payload for the Payomatix API request
         const payomatixRequestBody = JSON.stringify({
             email: customerEmail.trim(),
-            amount: amount.toFixed(2),
+            amount: amount.toFixed(2), // Ensure two decimal places
             currency: currency.trim(),
             return_url: returnUrl.trim(),
             notify_url: notifyUrl.trim(),
-            merchant_ref: merchantRef.trim()
+            merchant_ref: merchantRef.trim() // Send the enriched merchantRef
         });
 
-        // Consolidated log for data being sent to Payomatix
         console.log('--- PAYOMATIX API REQUEST ---');
         console.log('URL:', PAYOMATIX_API_URL);
-        console.log('Payload:', payomatixRequestBody); // <--- Explicitly printing payload here
+        console.log('Payload:', payomatixRequestBody);
         console.log('-----------------------------');
 
-
+        // Make the actual call to Payomatix
         const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
-                'Authorization': PAYOMATIX_SECRET_KEY,
+                'Authorization': PAYOMATIX_SECRET_KEY, // Use your Payomatix Secret Key for this API call
                 'Content-Type': 'application/json'
             },
             body: payomatixRequestBody
@@ -99,13 +125,12 @@ app.post('/create-payment-intent', async (req, res) => {
 
         console.log('Raw Payomatix API response data:', payomatixData);
 
+        // Handle Payomatix response
         if (payomatixData.responseCode === 300 && payomatixData.status === 'redirect') {
-            // Explicitly log if redirect URL is received
             console.log('--- REDIRECT URL RECEIVED ---');
             console.log('Payomatix API successful response (redirect):', payomatixData);
-            console.log('Redirect URL:', payomatixData.redirect_url); // <--- Explicitly printing redirect_url
+            console.log('Redirect URL:', payomatixData.redirect_url);
             console.log('-----------------------------');
-
 
             if (payomatixData.redirect_url) {
                 res.json({
@@ -149,24 +174,20 @@ app.post('/create-payment-intent', async (req, res) => {
     }
 });
 
-// THIS IS THE WEBHOOK ROUTE
+// THIS IS THE WEBHOOK ROUTE (Receives webhooks from Payomatix)
 app.post('/payomatix-webhook', async (req, res) => {
     console.log('--- WEBHOOK RECEIVED ---');
-    console.log('Received Payomatix webhook payload:', JSON.stringify(req.body, null, 2)); // Use JSON.stringify for cleaner logging
+    console.log('Received Payomatix webhook payload:', JSON.stringify(req.body, null, 2));
     console.log('------------------------');
 
     // --- IMPORTANT: Webhook Verification (CRITICAL for security) ---
-    // You MUST verify that this webhook actually came from Payomatix.
-    // Payomatix sends a 'merchant_signature' in the 'data' object.
-    // You'd typically re-calculate the signature on the raw body (before JSON parsing)
-    // using your Payomatix Webhook Signing Secret and compare it to webhookData.merchant_signature.
-    // If signatures don't match, return 403 Forbidden.
-    // This part is crucial and should be implemented for production.
-    // Example (conceptual - refer to Payomatix docs for exact algorithm):
+    // Implement this! For production, you MUST verify that this webhook came from Payomatix
+    // using their provided signature verification mechanism.
+    // Example (conceptual):
     /*
-    const rawBody = req.rawBody; // You might need special middleware like 'raw-body' to get this.
+    const rawBody = req.rawBody; // Requires middleware like 'raw-body' to get the unparsed body
     const expectedSignature = calculateHmacSha256(rawBody, process.env.PAYOMATIX_WEBHOOK_SIGNING_SECRET);
-    if (expectedSignature !== req.body.data.merchant_signature) {
+    if (expectedSignature !== req.headers['x-payomatix-signature']) { // Check their specific header
         console.warn('WEBHOOK SECURITY ALERT: Signature mismatch! Denying request.');
         return res.status(403).json({ message: 'Forbidden: Invalid webhook signature.' });
     }
@@ -184,17 +205,34 @@ app.post('/payomatix-webhook', async (req, res) => {
 
     // Destructure the fields exactly as they appear in the `data` object of the webhook payload
     const {
-        id: payomatixTransactionId, // 'id' from the 'data' object is Payomatix's transaction ID
-        merchant_ref: correlationId, // 'merchant_ref' from the 'data' object is YOUR correlation ID
-        status,                      // 'status' from the 'data' object ('success', 'failed', etc.)
-        response: message,           // 'response' from the 'data' object as the message
-        converted_amount: amount,    // 'converted_amount' is the final amount
+        id: payomatixTransactionId,
+        merchant_ref: correlationId, // This will contain our embedded userId and cardId
+        status,
+        response: message,
+        converted_amount: amount,
         currency,
         email: customerEmail,
         name: customerName,
         phone_no: customerPhone
-        // You can add more fields if needed, e.g., transaction_type, connector, etc.
     } = webhookData;
+
+    // --- NEW: Extract userId and cardId from the correlationId ---
+    let userId = null;
+    let cardId = null;
+
+    // Regex to find 'user_...' and 'card_...' patterns
+    const userIdMatch = correlationId.match(/-user_([a-zA-Z0-9]+)/); // Adjust regex based on actual ID format
+    const cardIdMatch = correlationId.match(/-card_([a-zA-Z0-9]+)/); // Adjust regex based on actual ID format
+
+    if (userIdMatch && userIdMatch[1]) {
+        userId = userIdMatch[1];
+        console.log(`Extracted userId: ${userId}`);
+    }
+    if (cardIdMatch && cardIdMatch[1]) {
+        cardId = cardIdMatch[1];
+        console.log(`Extracted cardId: ${cardId}`);
+    }
+    // --- END NEW Extraction ---
 
     // Basic validation for critical fields before forwarding
     if (!correlationId || !payomatixTransactionId || !status || amount === undefined || !currency) {
@@ -211,8 +249,8 @@ app.post('/payomatix-webhook', async (req, res) => {
             console.log(`Received Payomatix webhook, forwarding to Medicare Backend at: ${medicareBackendNotificationUrl}`);
 
             const forwardPayload = {
-                correlationId: correlationId, // Now correctly defined from webhookData.merchant_ref
-                payomatixId: payomatixTransactionId, // Now correctly defined from webhookData.id
+                correlationId: correlationId,
+                payomatixId: payomatixTransactionId,
                 status: status,
                 message: message,
                 amount: amount,
@@ -220,7 +258,10 @@ app.post('/payomatix-webhook', async (req, res) => {
                 customerEmail: customerEmail,
                 customerName: customerName,
                 customerPhone: customerPhone,
-                receivedAt: new Date().toISOString() // Timestamp when your Payomatix backend received it
+                receivedAt: new Date().toISOString(),
+                // --- NEW: Add userId and cardId to the forwarded payload ---
+                userId: userId, // Will be null if not found in correlationId
+                cardId: cardId   // Will be null if not found in correlationId
             };
 
             console.log('Forwarding Payload:', JSON.stringify(forwardPayload, null, 2));
@@ -229,7 +270,7 @@ app.post('/payomatix-webhook', async (req, res) => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Internal-Secret': MEDICARE_INTERNAL_SECRET // Crucial: Send the shared secret
+                    'X-Internal-Secret': MEDICARE_INTERNAL_SECRET
                 },
                 body: JSON.stringify(forwardPayload)
             });
@@ -252,7 +293,7 @@ app.post('/payomatix-webhook', async (req, res) => {
     res.status(200).json({ received: true, message: 'Webhook received and processed.' });
 });
 
-app.listen(3000, () => {
+app.listen(port, () => {
     console.log(`Payomatix backend server listening at http://localhost:${port}`);
     console.log('----------------------------------------------------');
     console.log('IMPORTANT NOTES:');
