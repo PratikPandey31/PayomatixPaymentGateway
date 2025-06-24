@@ -244,7 +244,7 @@ app.post('/payomatix-webhook', async (req, res) => {
     // --- Forwarding the webhook message to Medicare Backend ---
     if (MEDICARE_BACKEND_URL && MEDICARE_INTERNAL_SECRET) {
         try {
-            const medicareBackendNotificationUrl = `${MEDICARE_BACKEND_URL}/internal/payment-update`;
+            const medicareBackendNotificationUrl = `${MEDICARE_BACKEND_URL}/api/health-cards/internal/payment-update`;
             console.log(`Received Payomatix webhook, forwarding to Medicare Backend at: ${medicareBackendNotificationUrl}`);
 
             const forwardPayload = {
@@ -258,7 +258,6 @@ app.post('/payomatix-webhook', async (req, res) => {
                 customerName: customerName,
                 customerPhone: customerPhone,
                 receivedAt: new Date().toISOString(),
-                // --- NEW: Add userId and cardId to the forwarded payload ---
                 userId: userId, // Will be null if not found in correlationId
                 cardId: cardId   // Will be null if not found in correlationId
             };
