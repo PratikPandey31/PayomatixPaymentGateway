@@ -150,62 +150,105 @@ app.post('/create-payment-intent', async (req, res) => {
 });
 
 // THIS IS THE WEBHOOK ROUTE
-app.post('/payomatix-webhook', async(req, res) => {
-    // --- Forwarding the webhook message to Medicare Backend ---
-if (MEDICARE_BACKEND_URL && MEDICARE_INTERNAL_SECRET) {
-    try {
-        const medicareBackendNotificationUrl = `${MEDICARE_BACKEND_URL}/internal/payment-update`; // This is the new endpoint on Medicare Backend
-        console.log(`Received Payomatix webhook, forwarding to Medicare Backend at: ${medicareBackendNotificationUrl}`);
-        const forwardPayload = {
-            correlationId: correlationId, // Your internal ID for Medicare to identify the transaction
-            payomatixId: payomatixTransactionId, // Payomatix's unique transaction ID
-            status: status,
-            message: message,
-            amount: amount,
-            currency: currency,
-            customerEmail: customerEmail,
-            customerName: customerName,
-            customerPhone: customerPhone,
-            receivedAt: new Date().toISOString() // Timestamp when your Payomatix backend received it
-        };
-
-        console.log(`Forwarding webhook to Medicare Backend at: ${medicareBackendNotificationUrl}`);
-        console.log('Forwarding Payload:', forwardPayload);
-
-        const forwardResponse = await fetch(medicareBackendNotificationUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Internal-Secret': MEDICARE_INTERNAL_SECRET 
-            },
-            body: JSON.stringify(forwardPayload)
-        });
-
-        if (forwardResponse.ok) {
-            console.log('Webhook successfully forwarded to Medicare Backend.');
-        } else {
-            const errorText = await forwardResponse.text();
-            console.error(`Failed to forward webhook to Medicare Backend. Status: ${forwardResponse.status}, Response: ${errorText}`);
-        }
-    } catch (forwardError) {
-        console.error('Error forwarding webhook to Medicare Backend:', forwardError.message);
-    }
-} else {
-    console.warn('MEDICARE_BACKEND_URL or MEDICARE_INTERNAL_SECRET not set. Skipping Medicare Backend notification.');
-}
-// --- End forwarding logic ---
-    // Morgan will already show that a POST request came to /payomatix-webhook
-    // This console.log will show the body received.
+app.post('/payomatix-webhook', async (req, res) => {
     console.log('--- WEBHOOK RECEIVED ---');
-    console.log('Received Payomatix webhook payload:', req.body); // <--- Explicitly printing webhook payload
+    console.log('Received Payomatix webhook payload:', JSON.stringify(req.body, null, 2)); // Use JSON.stringify for cleaner logging
     console.log('------------------------');
 
-    // --- IMPORTANT: Webhook Verification (still critical for security, even if not fully implemented yet) ---
-    // You MUST verify that this webhook actually came from Payomatix and is not a malicious spoof.
-    // Consult Payomatix documentation for their signature verification method.
+    // --- IMPORTANT: Webhook Verification (CRITICAL for security) ---
+    // You MUST verify that this webhook actually came from Payomatix.
+    // Payomatix sends a 'merchant_signature' in the 'data' object.
+    // You'd typically re-calculate the signature on the raw body (before JSON parsing)
+    // using your Payomatix Webhook Signing Secret and compare it to webhookData.merchant_signature.
+    // If signatures don't match, return 403 Forbidden.
+    // This part is crucial and should be implemented for production.
+    // Example (conceptual - refer to Payomatix docs for exact algorithm):
+    /*
+    const rawBody = req.rawBody; // You might need special middleware like 'raw-body' to get this.
+    const expectedSignature = calculateHmacSha256(rawBody, process.env.PAYOMATIX_WEBHOOK_SIGNING_SECRET);
+    if (expectedSignature !== req.body.data.merchant_signature) {
+        console.warn('WEBHOOK SECURITY ALERT: Signature mismatch! Denying request.');
+        return res.status(403).json({ message: 'Forbidden: Invalid webhook signature.' });
+    }
+    */
     // --- END Webhook Verification ---
 
-    // Send 200 OK back to Payomatix to acknowledge receipt
+
+    // Extract relevant data from the nested 'data' object of the Payomatix webhook
+    const webhookData = req.body.data;
+
+    if (!webhookData) {
+        console.error('WEBHOOK ERROR: Payomatix webhook payload is missing the "data" object.', req.body);
+        return res.status(400).json({ received: false, message: 'Invalid webhook payload structure: missing data object.' });
+    }
+
+    // Destructure the fields exactly as they appear in the `data` object of the webhook payload
+    const {
+        id: payomatixTransactionId, // 'id' from the 'data' object is Payomatix's transaction ID
+        merchant_ref: correlationId, // 'merchant_ref' from the 'data' object is YOUR correlation ID
+        status,                      // 'status' from the 'data' object ('success', 'failed', etc.)
+        response: message,           // 'response' from the 'data' object as the message
+        converted_amount: amount,    // 'converted_amount' is the final amount
+        currency,
+        email: customerEmail,
+        name: customerName,
+        phone_no: customerPhone
+        // You can add more fields if needed, e.g., transaction_type, connector, etc.
+    } = webhookData;
+
+    // Basic validation for critical fields before forwarding
+    if (!correlationId || !payomatixTransactionId || !status || amount === undefined || !currency) {
+        console.error('PAYOMATIX BACKEND: Missing critical data after parsing webhook. Cannot forward.');
+        console.error('Parsed Data:', { correlationId, payomatixTransactionId, status, amount, currency });
+        return res.status(400).json({ received: false, message: 'Missing critical data in webhook payload.' });
+    }
+
+
+    // --- Forwarding the webhook message to Medicare Backend ---
+    if (MEDICARE_BACKEND_URL && MEDICARE_INTERNAL_SECRET) {
+        try {
+            const medicareBackendNotificationUrl = `${MEDICARE_BACKEND_URL}/internal/payment-update`;
+            console.log(`Received Payomatix webhook, forwarding to Medicare Backend at: ${medicareBackendNotificationUrl}`);
+
+            const forwardPayload = {
+                correlationId: correlationId, // Now correctly defined from webhookData.merchant_ref
+                payomatixId: payomatixTransactionId, // Now correctly defined from webhookData.id
+                status: status,
+                message: message,
+                amount: amount,
+                currency: currency,
+                customerEmail: customerEmail,
+                customerName: customerName,
+                customerPhone: customerPhone,
+                receivedAt: new Date().toISOString() // Timestamp when your Payomatix backend received it
+            };
+
+            console.log('Forwarding Payload:', JSON.stringify(forwardPayload, null, 2));
+
+            const forwardResponse = await fetch(medicareBackendNotificationUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Internal-Secret': MEDICARE_INTERNAL_SECRET // Crucial: Send the shared secret
+                },
+                body: JSON.stringify(forwardPayload)
+            });
+
+            if (forwardResponse.ok) {
+                console.log('Webhook successfully forwarded to Medicare Backend.');
+            } else {
+                const errorText = await forwardResponse.text();
+                console.error(`Failed to forward webhook to Medicare Backend. Status: ${forwardResponse.status}, Response: ${errorText}`);
+            }
+        } catch (forwardError) {
+            console.error('Error forwarding webhook to Medicare Backend:', forwardError.message);
+        }
+    } else {
+        console.warn('MEDICARE_BACKEND_URL or MEDICARE_INTERNAL_SECRET not set. Skipping Medicare Backend notification.');
+    }
+    // --- End forwarding logic ---
+
+    // Always send 200 OK back to Payomatix to acknowledge receipt promptly
     res.status(200).json({ received: true, message: 'Webhook received and processed.' });
 });
 
