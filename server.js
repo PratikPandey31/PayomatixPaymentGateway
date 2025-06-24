@@ -24,10 +24,9 @@ app.use(helmet());
 app.use(morgan('dev'));
 app.use(bodyParser.json()); // Parses application/json bodies
 
-// CORS Configuration
 app.use(cors({
-    origin: '*', // Be more specific in production, e.g., 'https://yourfrontend.onrender.com'
-    methods: ['GET', 'POST'],
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'], // Add OPTIONS here
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
