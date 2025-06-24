@@ -66,8 +66,8 @@ app.post('/create-payment-intent', async (req, res) => {
 
     // Always generate defaults if not provided
     let merchantRef = req.body.merchantRef || `payomatix-merchant-ref-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    let returnUrl = req.body.returnUrl || 'https://admin.payomatix.com/connectors/WXZE1750753439';
-    let notifyUrl = req.body.notifyUrl || 'https://payomatixpaymentgateway.onrender.com/payomatix-webhook';
+    let returnUrl = 'https://payomatixpaymentgatewayfrontend.onrender.com/payment-success';
+    let notifyUrl = 'https://payomatixpaymentgateway.onrender.com/payomatix-webhook';
 
     try {
         const payomatixRequestBody = JSON.stringify({
