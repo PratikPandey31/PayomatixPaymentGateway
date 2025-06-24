@@ -50,7 +50,6 @@ const paymentSchema = Joi.object({
         'string.email': 'Customer email must be a valid email address.',
         'any.required': 'Customer email is required.'
     }),
-    // --- NEW: Optional userId and cardId fields ---
     userId: Joi.string().optional().messages({
         'string.base': 'User ID must be a string.'
     }),
