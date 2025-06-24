@@ -246,14 +246,13 @@
 //         console.warn('WARNING: Medicare Backend URL or Internal Secret is not set. Internal notifications will be skipped.');
 //     }
 // });
-
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const helmet = require('helmet');
 const Joi = require('joi');
-const morgan = require('morgan'); // <--- Add this line to require morgan
+const morgan = require('morgan'); // Morgan is already added and working!
 
 const app = express();
 const port = 3000;
@@ -266,9 +265,12 @@ const PAYOMATIX_API_URL = 'https://admin.payomatix.com/payment/merchant/transact
 app.use(helmet());
 
 // Add Morgan middleware here, before your routes and body-parser
-// 'dev' is good for development: concise, color-coded output.
-app.use(morgan('dev')); // <--- Add this line
+app.use(morgan('dev')); // Using 'dev' format for concise, color-coded output
 
+// It's good practice to ensure bodyParser can handle raw bodies for webhook signature verification later
+// For this example, we keep bodyParser.json() which parses JSON.
+// If Payomatix uses a different content type for webhooks, or requires raw body for signature,
+// you might need bodyParser.raw() or a custom raw body middleware.
 app.use(bodyParser.json());
 
 app.use(cors({
@@ -298,9 +300,6 @@ const paymentSchema = Joi.object({
 });
 
 app.post('/create-payment-intent', async (req, res) => {
-    // Morgan will log the request, so this console.log might be redundant for basic tracking
-    // console.log('Received request to create payment intent:', req.body);
-
     const { error, value } = paymentSchema.validate(req.body, { abortEarly: false });
     if (error) {
         console.error('Validation error for /create-payment-intent:', error.details);
@@ -331,7 +330,12 @@ app.post('/create-payment-intent', async (req, res) => {
             merchant_ref: merchantRef.trim()
         });
 
-        console.log('Sending request to Payomatix API:', PAYOMATIX_API_URL, payomatixRequestBody);
+        // Consolidated log for data being sent to Payomatix
+        console.log('--- PAYOMATIX API REQUEST ---');
+        console.log('URL:', PAYOMATIX_API_URL);
+        console.log('Payload:', payomatixRequestBody); // <--- Explicitly printing payload here
+        console.log('-----------------------------');
+
 
         const payomatixResponse = await fetch(PAYOMATIX_API_URL, {
             method: 'POST',
@@ -348,7 +352,12 @@ app.post('/create-payment-intent', async (req, res) => {
         console.log('Raw Payomatix API response data:', payomatixData);
 
         if (payomatixData.responseCode === 300 && payomatixData.status === 'redirect') {
+            // Explicitly log if redirect URL is received
+            console.log('--- REDIRECT URL RECEIVED ---');
             console.log('Payomatix API successful response (redirect):', payomatixData);
+            console.log('Redirect URL:', payomatixData.redirect_url); // <--- Explicitly printing redirect_url
+            console.log('-----------------------------');
+
 
             if (payomatixData.redirect_url) {
                 res.json({
@@ -396,7 +405,9 @@ app.post('/create-payment-intent', async (req, res) => {
 app.post('/payomatix-webhook', (req, res) => {
     // Morgan will already show that a POST request came to /payomatix-webhook
     // This console.log will show the body received.
-    console.log('Received Payomatix webhook:', req.body);
+    console.log('--- WEBHOOK RECEIVED ---');
+    console.log('Received Payomatix webhook payload:', req.body); // <--- Explicitly printing webhook payload
+    console.log('------------------------');
 
     // --- IMPORTANT: Webhook Verification (still critical for security, even if not fully implemented yet) ---
     // You MUST verify that this webhook actually came from Payomatix and is not a malicious spoof.
