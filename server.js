@@ -55,7 +55,7 @@ const paymentSchema = Joi.object({
     cardId: Joi.string().optional().messages({
         'string.base': 'Card ID must be a string.'
     }),
-    returnUrl: Joi.string().uri().optional().messages({
+    returnUrl: Joi.string().uri().messages({
         'string.base': 'Return URL must be a string.',
         'string.uri': 'Return URL must be a valid URI.'
     })
@@ -95,7 +95,7 @@ app.post('/create-payment-intent', async (req, res) => {
 
     // Payomatix return and notify URLs (these need to be public and reachable by Payomatix)
     // Use provided returnUrl or fallback to default
-    let finalReturnUrl = returnUrl || 'https://payomatixpaymentgatewayfrontend.onrender.com/payment-status';
+    let finalReturnUrl = returnUrl;
     let notifyUrl = 'https://payomatixpaymentgateway.onrender.com/payomatix-webhook'; // This proxy's webhook URL
 
     try {
