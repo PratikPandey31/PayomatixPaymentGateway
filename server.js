@@ -54,6 +54,10 @@ const paymentSchema = Joi.object({
     }),
     cardId: Joi.string().optional().messages({
         'string.base': 'Card ID must be a string.'
+    }),
+    returnUrl: Joi.string().uri().optional().messages({
+        'string.base': 'Return URL must be a string.',
+        'string.uri': 'Return URL must be a valid URI.'
     })
 });
 
@@ -75,7 +79,8 @@ app.post('/create-payment-intent', async (req, res) => {
         currency,
         customerEmail,
         userId, // Extracted new optional field
-        cardId  // Extracted new optional field
+        cardId,  // Extracted new optional field
+        returnUrl // Extracted new optional field
     } = value; // 'value' contains the validated and cleaned data
 
     // Generate a unique merchantRef. Embed userId and cardId if provided.
@@ -89,7 +94,8 @@ app.post('/create-payment-intent', async (req, res) => {
     }
 
     // Payomatix return and notify URLs (these need to be public and reachable by Payomatix)
-    let returnUrl = 'https://payomatixpaymentgatewayfrontend.onrender.com/payment-status'; // Frontend URL
+    // Use provided returnUrl or fallback to default
+    let finalReturnUrl = returnUrl || 'https://payomatixpaymentgatewayfrontend.onrender.com/payment-status';
     let notifyUrl = 'https://payomatixpaymentgateway.onrender.com/payomatix-webhook'; // This proxy's webhook URL
 
     try {
@@ -98,7 +104,7 @@ app.post('/create-payment-intent', async (req, res) => {
             email: customerEmail.trim(),
             amount: amount.toFixed(2), // Ensure two decimal places
             currency: currency.trim(),
-            return_url: returnUrl.trim(),
+            return_url: finalReturnUrl.trim(),
             notify_url: notifyUrl.trim(),
             merchant_ref: merchantRef.trim() // Send the enriched merchantRef
         });
@@ -106,6 +112,7 @@ app.post('/create-payment-intent', async (req, res) => {
         console.log('--- PAYOMATIX API REQUEST ---');
         console.log('URL:', PAYOMATIX_API_URL);
         console.log('Payload:', payomatixRequestBody);
+        console.log('Return URL:', finalReturnUrl);
         console.log('-----------------------------');
 
         // Make the actual call to Payomatix
@@ -122,6 +129,7 @@ app.post('/create-payment-intent', async (req, res) => {
         const payomatixData = await payomatixResponse.json();
 
         console.log('Raw Payomatix API response data:', payomatixData);
+        console.timeEnd('Payomatix API Call');
 
         // Handle Payomatix response
         if (payomatixData.responseCode === 300 && payomatixData.status === 'redirect') {
@@ -305,4 +313,4 @@ app.listen(port, () => {
     if (!PAYOMATIX_PUBLIC_KEY || !PAYOMATIX_SECRET_KEY) {
         console.error('ERROR: Payomatix keys are not loaded from .env! Ensure your .env file is correctly configured.');
     }
-});
+}); 
